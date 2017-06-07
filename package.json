@@ -10,11 +10,13 @@
   "license": "ISC",
   "dependencies": {
     "eth-block-tracker": "^1.0.17",
-    "eth-store": "^3.0.0",
+    "eth-store": "^3.2.1",
     "ethereumjs-abi": "^0.6.2",
     "ethjs-abi": "^0.2.0",
     "hyperscript": "^1.4.7",
+    "obs-store": "^2.4.1",
     "treeify": "^1.0.1",
+    "virtual-dom": "^2.1.1",
     "web3-provider-engine": "^7.8.1"
   }
 }
