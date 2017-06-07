@@ -1,10 +1,11 @@
 {
-  "name": "udapp",
+  "name": "eth-udapp",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "beefy index.js:bundle.js --live --open",
+    "build": "browserify index.js > bundle.js"
   },
   "author": "",
   "license": "ISC",
@@ -18,5 +19,9 @@
     "treeify": "^1.0.1",
     "virtual-dom": "^2.1.1",
     "web3-provider-engine": "^7.8.1"
+  },
+  "devDependencies": {
+    "beefy": "^2.1.8",
+    "browserify": "^14.4.0"
   }
 }
