@@ -38,7 +38,7 @@ function startApp(provider){
 
   // view store
   const viewStore = global.viewStore = new ObsStore()
-  
+
   // root app store
   const appStore = global.appStore = new ComposedStore({
     abi: abiStore,
@@ -94,10 +94,10 @@ function subscribeEthStoreToAbi(appState, ethStore) {
     const toAddress = appState.view.address
     const methods = abi.filter((interface) => interface.type === 'function')
     // const methodsWithNoArgs = methods.filter((interface) => interface.inputs.length === 0)
-    
+
     // subscribe to method result
     methods.forEach((method) => {
-      
+
       ethStore.put(method.name, getPayload)
 
       function getPayload(block){
@@ -141,44 +141,89 @@ function render(appState, actions){
   var methodsWithNoArgs = methods.filter((interface) => interface.inputs.length === 0)
   var methodsWithArgs = methods.filter((interface) => interface.inputs.length > 0)
 
-  return h('.app-content', [
-
-    h('h3','abi:'),
-    h('textarea', {
-      value: appState.abi ? JSON.stringify(appState.abi) : '',
-      placeholder: 'abi goes here',
-      onkeyup: (event) => actions.setAbi(JSON.parse(event.target.value)),
-      onchange: (event) => actions.setAbi(JSON.parse(event.target.value)),
-    }),
-    // h('textarea', {
-    //   value: treeify(appState.abi, true),
-    //   disabled: true,
-    // }),
-
-    h('h3','address:'),
-    h('input', {
-      value: appState.view.address,
-      onkeyup: (event) => actions.setAddress(event.target.value),
-      onchange: (event) => actions.setAddress(event.target.value),
-    }),
-
-    h('h3','events:'),
-    h('div', {},
-      events.map(function(interface){
-        return h('div', interface.name)
-      })
-    ),
-
-    h('h3','methodsWithNoArgs:'),
-    h('div', {},
-      methodsWithNoArgs.map((interface) => renderMethod(interface, appState.eth, actions))
-    ),
-
-    h('h3','methodsWithArgs:'),
-    h('div', {},
-      methodsWithArgs.map((interface) => renderMethod(interface, appState.eth, actions))
-    ),
-
+  return h('.container', [
+    h('.row', [
+      h('.col-sm-12 .col-md-10', [
+        h('.col-sm-2', [
+          h('h1', 'U-Dapp'),
+        ]),
+        h('.col-sm-10', [
+          h('h2', 'A Universal Front-End For Decentralized Applications'),
+        ]),
+      ]),
+      h('.col-sm-12 .col-md-10', [
+        h('form .form-horizontal', [
+          h('.form-group', [
+            h('label .control-label .col-sm-2', {
+              for: 'abi',
+            }, 'Contract ABI:'),
+            h('.col-sm-10', [
+              h('textarea .form-control', {
+                rows: '10',
+                id: 'abi',
+                value: appState.abi ? JSON.stringify(appState.abi) : '',
+                placeholder: 'abi goes here',
+                onkeyup: (event) => actions.setAbi(JSON.parse(event.target.value)),
+                onchange: (event) => actions.setAbi(JSON.parse(event.target.value)),
+              })
+            ])
+          ]),
+          // h('textarea', {
+          //   value: treeify(appState.abi, true),
+          //   disabled: true,
+          // }),
+          h('.form-group', [
+            h('label .control-label .col-sm-2', {
+              for: 'address',
+            }, 'Contract Address:'),
+            h('.col-sm-10', [
+              h('input .form-control', {
+                id: 'address',
+                value: appState.view.address,
+                onkeyup: (event) => actions.setAddress(event.target.value),
+                onchange: (event) => actions.setAddress(event.target.value),
+              })
+            ])
+          ]),
+          h('.form-group', [
+            h('label .control-label .col-sm-2', {
+              for: 'events',
+            }, 'Events:'),
+            h('.col-sm-10', [
+              h('ul .list-group', [
+                h('li .list-group-item', {},
+                  events.map(function(interface){
+                    return h('div', interface.name)
+                  })
+                )
+              ])
+            ])
+          ]),
+          h('.form-group', [
+            h('label .control-label .col-sm-2', {
+              for: 'methods1',
+            }, 'Methods With No Arguments:'),
+            h('.col-sm-10', [
+              h('ul .list-group', {
+                id: 'methods1',
+                }, methodsWithNoArgs.map((interface) => renderMethod(interface, appState.eth, actions))
+              )
+            ])
+          ]),
+          h('.form-group', [
+            h('label .control-label .col-sm-2', {
+              for: 'methods2',
+            }, 'Methods With Arguments:'),
+            h('.col-sm-10', [
+              h('ul .list-group', {
+                id: 'methods2',
+                }, methodsWithArgs.map((interface) => renderMethod(interface, appState.eth, actions))
+              )
+            ])
+          ])
+        ])
+      ])
+    ])
   ])
 }
 
@@ -187,18 +232,18 @@ function renderMethod(interface, ethState, actions){
   const inputs = interface.inputs.map((arg)=>`${arg.type} ${arg.name}`).join(', ')
   const rawOutput = ethState[interface.name]
   const decodedValues = rawOutput ? decodeAbiOutput(interface, rawOutput) : null
-  return h('div', [
-    h('.method-label', `${interface.name}( ${inputs} ): ${outputs} -> ${decodedValues}`),
+  return h('li .list-group-item', [
+    h('label .method-label .control-label', `${interface.name}( ${inputs} ): ${outputs} -> ${decodedValues}`),
     h('.method-form', interface.inputs.map((arg, index) => (
-      h('.input-row', [
-        h(`label.input-label`, arg.name),
-        h(`input.input-type-${arg.type}`, {
+      h('.input-group', [
+        h(`span.input-label.input-group-addon`, arg.name),
+        h(`input.form-control.input-type-${arg.type}`, {
           id: `${interface.name}-${index}`,
+          placeholder: `${arg.type}`,
           onchange: () => actions.refreshEthStore(interface.name),
         }),
       ])
     ))),
-    h('br'),
   ])
 }
 
