@@ -103,11 +103,16 @@ function subscribeEthStoreToAbi(appState, ethStore) {
       function getPayload(block){
         const args = readArgumentsFromDom(method)
         try {
+          const fromAddress = web3.eth.accounts[0]
           const txData = EthAbi.encodeMethod(method, args)
           // console.log(method.name, 'getPayload:', args)
           return {
             method: 'eth_call',
-            params: [{ to: toAddress, data: txData }],
+            params: [{
+              from: fromAddress,
+              to: toAddress,
+              data: txData,
+            }],
           }
         } catch (err) {
           if (args.filter(Boolean).length !== args.length) return
