@@ -51,6 +51,29 @@ function startApp(provider){
     setAddress: (address) => viewStore.updateState({ address }),
     setAbi: (abi) => abiStore.putState(abi),
     refreshEthStore: (key) => ethStore._updateForBlock(blockTracker.getCurrentBlock()),
+    execute: (method) => {
+      const args = readArgumentsFromDom(method)
+      try {
+        const appState = appStore.getState()
+        const toAddress = appState.view.address
+        const fromAddress = web3.eth.accounts[0]
+        console.log('encode:', method.name, args)
+        const txData = EthAbi.encodeMethod(method, args)
+        const payload = {
+          id: 1,
+          method: 'eth_sendTransaction',
+          params: [{
+            from: fromAddress,
+            to: toAddress,
+            data: txData,
+          }],
+        }
+        console.log('exec:', method.name, args, payload)
+        web3.currentProvider.sendAsync(payload, console.log)
+      } catch (err) {
+        console.warn(err)
+      }
+    }
   }
 
   // load initial state from hash location
@@ -119,23 +142,31 @@ function subscribeEthStoreToAbi(appState, ethStore) {
           console.warn(err)
         }
       }
-
-      function readArgumentsFromDom(method){
-        return method.inputs.map((arg, index) => {
-          const el = document.getElementById(`${method.name}-${index}`)
-          return el && el.value
-        })
-      }
-
     })
   } catch(err) {
     console.error(err)
   }
 }
 
-function setAddress(address){
-  appState.address = address
-  location.hash = address
+// function setAddress(address){
+//   appState.address = address
+//   location.hash = address
+// }
+
+function readArgumentsFromDom(method){
+  return method.inputs.map((arg, index) => {
+    const el = document.getElementById(`${method.name}-${index}`)
+    if (!el) return
+    const isArray = (arg.type.slice(-2) === '[]')
+    if (isArray) {
+      try {
+        return JSON.parse(el.value)
+      } catch (err) {
+        return el.value
+      }
+    }
+    return el.value
+  })
 }
 
 // template
@@ -237,19 +268,26 @@ function renderMethod(interface, ethState, actions){
   const inputs = interface.inputs.map((arg)=>`${arg.type} ${arg.name}`).join(', ')
   const rawOutput = ethState[interface.name]
   const decodedValues = rawOutput ? decodeAbiOutput(interface, rawOutput) : null
-  return h('li .list-group-item', [
-    h('label .method-label .control-label', `${interface.name}( ${inputs} ): ${outputs} -> ${decodedValues}`),
-    h('.method-form', interface.inputs.map((arg, index) => (
-      h('.input-group', [
-        h(`span.input-label.input-group-addon`, arg.name),
-        h(`input.form-control.input-type-${arg.type}`, {
-          id: `${interface.name}-${index}`,
-          placeholder: `${arg.type}`,
-          onchange: () => actions.refreshEthStore(interface.name),
-        }),
-      ])
-    ))),
-  ])
+  return (
+    h('li .list-group-item', [
+      h('label .method-label .control-label', `${interface.name}( ${inputs} ): ${outputs} -> ${decodedValues}`),
+      h('.method-form', interface.inputs.map((arg, index) => (
+        h('.input-group', [
+          h(`span.input-label.input-group-addon`, arg.name),
+          h(`input.form-control.input-type-${arg.type}`, {
+            id: `${interface.name}-${index}`,
+            placeholder: `${arg.type}`,
+            onchange: () => actions.refreshEthStore(interface.name),
+          }),
+        ])
+      ))),
+      interface.constant ? null : (
+        h('button', {
+          onclick: () => actions.execute(interface),
+        }, 'exec')
+      ),
+    ])
+  )
 }
 
 // util
