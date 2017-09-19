@@ -1,7 +1,9 @@
+const metamask = require('metamascara')
 const h = require('virtual-dom/h')
 const treeify = require('treeify').asTree
 const ObsStore = require('obs-store')
 const ComposedStore = require('obs-store/lib/composed')
+const EthQuery = require('eth-query')
 const EthStore = require('eth-store')
 const EthAbi = require('ethjs-abi')
 const EthBlockTracker = require('eth-block-tracker')
@@ -15,16 +17,14 @@ const defaultState = {
 
 window.addEventListener('load', function() {
 
-  // Checking if Web3 has been injected by the browser (Mist/MetaMask)
-  if (typeof web3 !== 'undefined') {
-    startApp(web3.currentProvider)
-  } else {
-    document.body.innerHTML = 'no web3 found'
-  }
+  const provider = metamask.createDefaultProvider({})
+  startApp(provider)
 
 })
 
 function startApp(provider){
+
+  const ethQuery = global.ethQuery = new EthQuery(provider)
 
   const blockTracker = new EthBlockTracker({ provider })
   blockTracker.on('block', (block) => console.log('block #'+Number(block.number)))
@@ -49,6 +49,7 @@ function startApp(provider){
   // actions
   const actions = {
     setAddress: (address) => viewStore.updateState({ address }),
+    setFromAddress: (fromAddress) => viewStore.updateState({ fromAddress }),
     setAbi: (abi) => abiStore.putState(abi),
     refreshEthStore: (key) => ethStore._updateForBlock(blockTracker.getCurrentBlock()),
     execute: (method) => {
@@ -56,7 +57,8 @@ function startApp(provider){
       try {
         const appState = appStore.getState()
         const toAddress = appState.view.address
-        const fromAddress = web3.eth.accounts[0]
+        const fromAddress = appState.view.fromAddress
+
         console.log('encode:', method.name, args)
         const txData = EthAbi.encodeMethod(method, args)
         const payload = {
@@ -69,11 +71,21 @@ function startApp(provider){
           }],
         }
         console.log('exec:', method.name, args, payload)
-        web3.currentProvider.sendAsync(payload, console.log)
+        provider.sendAsync(payload, console.log)
       } catch (err) {
         console.warn(err)
       }
     }
+  }
+
+  // poll for latest account
+  refreshAddress()
+  function refreshAddress() {
+    ethQuery.accounts((err, accounts) => {
+      if (err) throw err
+      actions.setFromAddress(accounts[0])
+    })
+    setTimeout(refreshAddress, 1000)
   }
 
   // load initial state from hash location
@@ -115,6 +127,7 @@ function subscribeEthStoreToAbi(appState, ethStore) {
     ethStore.clear()
     const abi = appState.abi
     const toAddress = appState.view.address
+    const fromAddress = appState.view.fromAddress
     const methods = abi.filter((interface) => interface.type === 'function')
     // const methodsWithNoArgs = methods.filter((interface) => interface.inputs.length === 0)
 
@@ -126,7 +139,6 @@ function subscribeEthStoreToAbi(appState, ethStore) {
       function getPayload(block){
         const args = readArgumentsFromDom(method)
         try {
-          const fromAddress = web3.eth.accounts[0]
           const txData = EthAbi.encodeMethod(method, args)
           // console.log(method.name, 'getPayload:', args)
           return {
@@ -135,7 +147,7 @@ function subscribeEthStoreToAbi(appState, ethStore) {
               from: fromAddress,
               to: toAddress,
               data: txData,
-            }],
+            }, block ? block.number : 'latest'],
           }
         } catch (err) {
           if (args.filter(Boolean).length !== args.length) return
