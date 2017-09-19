@@ -83,7 +83,10 @@ function startApp(provider){
   function refreshAddress() {
     ethQuery.accounts((err, accounts) => {
       if (err) throw err
-      actions.setFromAddress(accounts[0])
+      const newAccount = accounts[0]
+      const currentAccount = viewStore.getState().fromAddress
+      if (newAccount === currentAccount) return
+      actions.setFromAddress(newAccount)
     })
     setTimeout(refreshAddress, 1000)
   }
@@ -280,6 +283,7 @@ function renderMethod(interface, ethState, actions){
   const inputs = interface.inputs.map((arg)=>`${arg.type} ${arg.name}`).join(', ')
   const rawOutput = ethState[interface.name]
   const decodedValues = rawOutput ? decodeAbiOutput(interface, rawOutput) : null
+
   return (
     h('li .list-group-item', [
       h('label .method-label .control-label', `${interface.name}( ${inputs} ): ${outputs} -> ${decodedValues}`),
