@@ -30,26 +30,30 @@ function startApp(provider){
   blockTracker.on('block', (block) => console.log('block #'+Number(block.number)))
   blockTracker.start()
 
+  // setup eth-store (blockchain state)
+  const ethStore = global.ethStore = new EthStore(blockTracker, provider)
+
   // abi-store
   const abiStore = global.abiStore = new ObsStore()
 
-  // setup eth-store
-  const ethStore = global.ethStore = new EthStore(blockTracker, provider)
-
-  // view store
+  // view store (in query params)
   const viewStore = global.viewStore = new ObsStore()
+
+  // auxillary data store (not in query params)
+  const auxStore = global.auxStore = new ObsStore()
 
   // root app store
   const appStore = global.appStore = new ComposedStore({
     abi: abiStore,
     view: viewStore,
     eth: ethStore,
+    aux: auxStore,
   })
 
   // actions
   const actions = {
     setAddress: (address) => viewStore.updateState({ address }),
-    setFromAddress: (fromAddress) => viewStore.updateState({ fromAddress }),
+    setFromAddress: (fromAddress) => auxStore.updateState({ fromAddress }),
     setAbi: (abi) => abiStore.putState(abi),
     refreshEthStore: (key) => ethStore._updateForBlock(blockTracker.getCurrentBlock()),
     execute: (method) => {
@@ -57,7 +61,7 @@ function startApp(provider){
       try {
         const appState = appStore.getState()
         const toAddress = appState.view.address
-        const fromAddress = appState.view.fromAddress
+        const fromAddress = appState.aux.fromAddress
 
         console.log('encode:', method.name, args)
         const txData = EthAbi.encodeMethod(method, args)
@@ -84,7 +88,7 @@ function startApp(provider){
     ethQuery.accounts((err, accounts) => {
       if (err) throw err
       const newAccount = accounts[0]
-      const currentAccount = viewStore.getState().fromAddress
+      const currentAccount = auxStore.getState().fromAddress
       if (newAccount === currentAccount) return
       actions.setFromAddress(newAccount)
     })
@@ -130,7 +134,7 @@ function subscribeEthStoreToAbi(appState, ethStore) {
     ethStore.clear()
     const abi = appState.abi
     const toAddress = appState.view.address
-    const fromAddress = appState.view.fromAddress
+    const fromAddress = appState.aux.fromAddress
     const methods = abi.filter((interface) => interface.type === 'function')
     // const methodsWithNoArgs = methods.filter((interface) => interface.inputs.length === 0)
 
