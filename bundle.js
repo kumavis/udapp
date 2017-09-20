@@ -57,7 +57,7 @@ EthereumStore.prototype.del = function(key){
 EthereumStore.prototype.clear = function(){
   this._subscriptions = {}
   this._currentState = {}
-  // this._didUpdate()
+  this._didUpdate()
 }
 
 EthereumStore.prototype.subscribe = function(handler){
@@ -18464,7 +18464,7 @@ const exampleAbi = require('./token.json')
 
 const defaultState = {
   abi: exampleAbi,
-  view: { address: '0x6810e776880c02933d47db1b9fc05908e5386b96' },
+  view: { address: '0xd26114cd6EE289AccF82350c8d8487fedB8A0C07' },
 }
 
 window.addEventListener('load', function() {
@@ -18482,26 +18482,34 @@ function startApp(provider){
   blockTracker.on('block', (block) => console.log('block #'+Number(block.number)))
   blockTracker.start()
 
+  // setup eth-store (blockchain state)
+  const ethStore = global.ethStore = new EthStore(blockTracker, provider)
+  global.ethStore = ethStore
+
   // abi-store
   const abiStore = global.abiStore = new ObsStore()
 
-  // setup eth-store
-  const ethStore = global.ethStore = new EthStore(blockTracker, provider)
-
-  // view store
+  // view store (in query params)
   const viewStore = global.viewStore = new ObsStore()
+
+  // auxillary data store (not in query params)
+  const auxStore = global.auxStore = new ObsStore({
+    fromAddress: undefined,
+    events: [],
+  })
 
   // root app store
   const appStore = global.appStore = new ComposedStore({
     abi: abiStore,
     view: viewStore,
     eth: ethStore,
+    aux: auxStore,
   })
 
   // actions
   const actions = {
     setAddress: (address) => viewStore.updateState({ address }),
-    setFromAddress: (fromAddress) => viewStore.updateState({ fromAddress }),
+    setFromAddress: (fromAddress) => auxStore.updateState({ fromAddress }),
     setAbi: (abi) => abiStore.putState(abi),
     refreshEthStore: (key) => ethStore._updateForBlock(blockTracker.getCurrentBlock()),
     execute: (method) => {
@@ -18509,7 +18517,7 @@ function startApp(provider){
       try {
         const appState = appStore.getState()
         const toAddress = appState.view.address
-        const fromAddress = appState.view.fromAddress
+        const fromAddress = appState.aux.fromAddress
 
         console.log('encode:', method.name, args)
         const txData = EthAbi.encodeMethod(method, args)
@@ -18536,7 +18544,7 @@ function startApp(provider){
     ethQuery.accounts((err, accounts) => {
       if (err) throw err
       const newAccount = accounts[0]
-      const currentAccount = viewStore.getState().fromAddress
+      const currentAccount = auxStore.getState().fromAddress
       if (newAccount === currentAccount) return
       actions.setFromAddress(newAccount)
     })
@@ -18581,10 +18589,18 @@ function subscribeEthStoreToAbi(appState, ethStore) {
   try {
     ethStore.clear()
     const abi = appState.abi
-    const toAddress = appState.view.address
-    const fromAddress = appState.view.fromAddress
+    const contractAddress = appState.view.address
+    const fromAddress = appState.aux.fromAddress
     const methods = abi.filter((interface) => interface.type === 'function')
-    // const methodsWithNoArgs = methods.filter((interface) => interface.inputs.length === 0)
+    
+    // get logs for block
+    ethStore.put('logs', (block) => ({
+      method: 'eth_getLogs',
+      params: [{
+        address: contractAddress,
+        fromBlock: block ? block.number : 'latest',
+      }],
+    }))
 
     // subscribe to method result
     methods.forEach((method) => {
@@ -18600,7 +18616,7 @@ function subscribeEthStoreToAbi(appState, ethStore) {
             method: 'eth_call',
             params: [{
               from: fromAddress,
-              to: toAddress,
+              to: contractAddress,
               data: txData,
             }, block ? block.number : 'latest'],
           }
@@ -18639,10 +18655,11 @@ function readArgumentsFromDom(method){
 // template
 
 function render(appState, actions){
-  var events = (appState.abi || []).filter((interface) => interface.type === 'event')
-  var methods = (appState.abi || []).filter((interface) => interface.type === 'function')
-  var methodsWithNoArgs = methods.filter((interface) => interface.inputs.length === 0)
-  var methodsWithArgs = methods.filter((interface) => interface.inputs.length > 0)
+  const events = (appState.abi || []).filter((interface) => interface.type === 'event')
+  const methods = (appState.abi || []).filter((interface) => interface.type === 'function')
+  const methodsWithNoArgs = methods.filter((interface) => interface.inputs.length === 0)
+  const methodsWithArgs = methods.filter((interface) => interface.inputs.length > 0)
+  const eventStream = appState.eth.logs || []
 
   return h('.container', [
     h('.row', [
@@ -18671,10 +18688,7 @@ function render(appState, actions){
               })
             ])
           ]),
-          // h('textarea', {
-          //   value: treeify(appState.abi, true),
-          //   disabled: true,
-          // }),
+
           h('.form-group', [
             h('label .control-label .col-sm-2', {
               for: 'address',
@@ -18688,20 +18702,7 @@ function render(appState, actions){
               })
             ])
           ]),
-          h('.form-group', [
-            h('label .control-label .col-sm-2', {
-              for: 'events',
-            }, 'Events:'),
-            h('.col-sm-10', [
-              h('ul .list-group', [
-                h('li .list-group-item', {},
-                  events.map(function(interface){
-                    return h('div', interface.name)
-                  })
-                )
-              ])
-            ])
-          ]),
+          
           h('.form-group', [
             h('label .control-label .col-sm-2', {
               for: 'methods1',
@@ -18723,7 +18724,35 @@ function render(appState, actions){
                 }, methodsWithArgs.map((interface) => renderMethod(interface, appState.eth, actions))
               )
             ])
-          ])
+          ]),
+
+          h('.form-group', [
+            h('label .control-label .col-sm-2', {
+              for: 'events',
+            }, 'Events:'),
+            h('.col-sm-10', [
+              h('ul .list-group', [
+                h('li .list-group-item', {},
+                  events.map(function(interface){
+                    return h('div', interface.name)
+                  })
+                )
+              ])
+            ])
+          ]),
+          h('.form-group', [
+            h('label .control-label .col-sm-2', 'Events emitted this block:'),
+            h('.col-sm-10', [
+              h('ul .list-group', [
+                h('li .list-group-item', {},
+                  eventStream.map(function(event){
+                    return h('div', JSON.stringify(event))
+                  })
+                )
+              ])
+            ])
+          ]),
+
         ])
       ])
     ])
